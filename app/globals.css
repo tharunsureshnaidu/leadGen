@@ -1,26 +1,34 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
+/* SaaSquatch design language: dark navy, teal→blue gradient accents, Montserrat display / Inter UI. */
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: var(--font-inter);
+  --font-display: var(--font-montserrat);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+:root {
+  color-scheme: dark;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: radial-gradient(1200px 600px at 10% -10%, rgba(20, 184, 166, 0.08), transparent 60%), #0b1120;
+  color: #e2e8f0;
+}
+
+@layer components {
+  .card {
+    @apply rounded-2xl border border-slate-700/60 bg-slate-800/40 shadow-xl shadow-black/20 backdrop-blur;
+  }
+  .field {
+    @apply rounded-lg border border-slate-600/60 bg-slate-700/40 px-3 py-2 text-sm text-slate-100 outline-none placeholder:text-slate-400 focus:border-teal-400 focus:ring-2 focus:ring-teal-400/30;
+  }
+  .btn-primary {
+    @apply rounded-lg bg-linear-to-r from-teal-500 to-blue-500 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-teal-500/20 transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40;
+  }
+  .btn-ghost {
+    @apply rounded-lg border border-slate-600/70 bg-slate-800/60 px-3 py-1.5 text-sm font-medium text-slate-200 transition hover:border-slate-500 hover:bg-slate-700/60 disabled:cursor-not-allowed disabled:opacity-40;
+  }
+  .text-gradient {
+    @apply bg-linear-to-r from-teal-400 to-blue-500 bg-clip-text text-transparent;
+  }
 }
