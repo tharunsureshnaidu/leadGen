@@ -5,12 +5,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import LeadDrawer from "@/components/LeadDrawer";
 import { ScoreBadge, SignalChips } from "@/components/ui";
 import { INDUSTRIES } from "@/lib/industries";
+import { formatPhone } from "@/lib/phone";
 import type { Lead } from "@/lib/types";
 
 type ListRow = { list: string; n: number };
 type Filters = { q: string; tier: "all" | "A" | "B" | "C"; verified: boolean; hideChains: boolean; status: "all" | Lead["status"] };
 
 const CONCURRENCY = 4;
+const AUTO_ENRICH_MAX = 60;
 
 export default function Home() {
   const [leads, setLeads] = useState<Lead[]>([]);
@@ -33,6 +35,7 @@ export default function Home() {
     setLists(data.lists);
     setAi(data.ai);
     setList((cur) => focus ?? (cur || data.lists[0]?.list || ""));
+    return data.leads as Lead[];
   }, []);
   useEffect(() => { load(); }, [load]);
   useEffect(() => {
@@ -75,8 +78,19 @@ export default function Home() {
     const data = await res.json();
     setBusy("");
     if (!res.ok) return setNotice({ kind: "err", text: data.error });
+    // OpenStreetMap coverage varies by city and trade; don't switch to an empty list.
+    if (!data.received) {
+      return setNotice({ kind: "err", text: `No ${INDUSTRIES[industry].label} businesses are mapped in OpenStreetMap for "${place}". Try another industry (Dental, Auto repair, Accounting usually have the most), a larger city, or Import CSV.` });
+    }
     setNotice({ kind: "ok", text: `Found ${data.received} businesses · ${data.added} new · ${data.duplicates} already known (merged)` });
-    await load(data.list);
+    await autoEnrich(data.list, await load(data.list));
+  }
+
+  // Small lists are scored straight away (one click from search to ranked list). Big lists wait for the
+  // user, in the spirit of SaaSquatch's "only enrich the leads you want".
+  async function autoEnrich(listName: string, all: Lead[]) {
+    const ids = all.filter((l) => l.list === listName && !l.enriched_at).map((l) => l.id);
+    if (ids.length && ids.length <= AUTO_ENRICH_MAX) await enrich(ids);
   }
 
   function importCsv(file: File) {
@@ -99,7 +113,7 @@ export default function Home() {
         const out = await res.json();
         if (!res.ok) return setNotice({ kind: "err", text: out.error });
         setNotice({ kind: "ok", text: `Imported ${out.received} rows · ${out.added} new · ${out.duplicates} duplicates merged` });
-        await load(out.list);
+        await autoEnrich(out.list, await load(out.list));
       },
     });
   }
@@ -107,8 +121,8 @@ export default function Home() {
   // Enrich the selection if there is one (SaaSquatch's "only enrich the leads you want"), else everything pending.
   const enrichTargets = selected.size ? inList.filter((l) => selected.has(l.id)) : pending;
 
-  async function enrich() {
-    const queue = enrichTargets.map((l) => l.id);
+  async function enrich(ids: number[] = enrichTargets.map((l) => l.id)) {
+    const queue = [...ids];
     setBusy("enrich");
     setProgress({ done: 0, total: queue.length });
     // Small worker pool: steady progress, polite to target sites, no long-running request.
@@ -134,7 +148,7 @@ export default function Home() {
       const s = l.signals;
       const owner = s?.owners[0];
       const email = s?.emails.find((e) => e.mx) ?? s?.emails[0];
-      const phone = l.phone ?? s?.phones[0] ?? "";
+      const phone = formatPhone(l.phone) ?? s?.phones[0] ?? "";
       const why = (l.reasons ?? []).filter((r) => r.points > 0).map((r) => r.text).join("; ");
       if (format === "hubspot") {
         const [first, ...last] = (owner?.name ?? "").split(" ");
@@ -247,7 +261,7 @@ export default function Home() {
 
         <section className="card overflow-hidden">
           <div className="flex flex-wrap items-center gap-2 border-b border-slate-700/60 p-3">
-            <button onClick={enrich} disabled={!!busy || !enrichTargets.length} className="btn-primary py-1.5">
+            <button onClick={() => enrich()} disabled={!!busy || !enrichTargets.length} className="btn-primary py-1.5">
               {busy === "enrich"
                 ? `Enriching ${progress.done}/${progress.total}…`
                 : selected.size
@@ -331,7 +345,9 @@ export default function Home() {
                         <div className="truncate font-medium text-slate-100">{l.name}</div>
                         <div className="truncate text-xs text-slate-400">{[l.domain, l.city].filter(Boolean).join(" · ") || "—"}</div>
                       </td>
-                      <td className="px-3 py-2.5"><SignalChips lead={l} /></td>
+                      <td className="px-3 py-2.5">
+                        {l.enriched_at ? <SignalChips lead={l} /> : <span className="text-xs italic text-slate-500">{busy === "enrich" ? "Scoring…" : "Not scored yet"}</span>}
+                      </td>
                       <td className="px-3 py-2.5 text-slate-200">{owner ? <>{owner.name}<div className="text-xs text-slate-400">{owner.title}</div></> : <span className="text-slate-600">—</span>}</td>
                       <td className="max-w-[14rem] px-3 py-2.5">
                         {email ? (
@@ -340,7 +356,7 @@ export default function Home() {
                             <span className="truncate">{email.address}</span>
                           </div>
                         ) : null}
-                        <div className="text-xs text-slate-400">{l.phone ?? l.signals?.phones[0] ?? (email ? "" : "—")}</div>
+                        <div className="text-xs text-slate-400">{formatPhone(l.phone) ?? l.signals?.phones[0] ?? (email ? "" : "—")}</div>
                       </td>
                       <td className="px-3 py-2.5" onClick={(e) => e.stopPropagation()}>
                         <select value={l.status} onChange={(e) => setStatus([l.id], e.target.value as Lead["status"])} className="field px-1.5 py-1 text-xs">

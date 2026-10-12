@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { formatPhone } from "@/lib/phone";
 import type { Lead } from "@/lib/types";
 import { ScoreBadge } from "./ui";
 
@@ -96,7 +97,7 @@ export default function LeadDrawer({
                   </div>
                 )) : "—"}
               </Field>
-              <Field label="Phones">{[lead.phone, ...s.phones].filter(Boolean).slice(0, 3).map((p) => <div key={p}>{p}</div>)}</Field>
+              <Field label="Phones">{[...new Set([formatPhone(lead.phone), ...s.phones].filter(Boolean))].slice(0, 3).map((p) => <div key={p}>{p}</div>)}</Field>
               <Field label="Social">
                 {s.linkedin && <a className="block text-teal-300 hover:underline" href={s.linkedin} target="_blank" rel="noreferrer">LinkedIn ↗</a>}
                 {s.facebook && <a className="block text-teal-300 hover:underline" href={s.facebook} target="_blank" rel="noreferrer">Facebook ↗</a>}

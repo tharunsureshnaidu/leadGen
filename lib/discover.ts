@@ -1,5 +1,6 @@
 import { cached, db, HOUR, init } from "./db.ts";
 import { INDUSTRIES } from "./industries.ts";
+import { formatPhone } from "./phone.ts";
 
 export const UA = "AcquisitionFitLeads/1.0 (lead research; respects robots.txt)";
 const OVERPASS = ["https://overpass-api.de/api/interpreter", "https://overpass.kumi.systems/api/interpreter", "https://overpass.private.coffee/api/interpreter"];
@@ -64,8 +65,8 @@ async function overpass(query: string): Promise<OsmEl[]> {
       const res = await fetch(url, { method: "POST", body: new URLSearchParams({ data: query }), headers: { "User-Agent": UA }, signal: AbortSignal.timeout(Math.min(25_000, deadline - Date.now())) });
       if (res.ok) return (await res.json()).elements;
       lastErr = new Error(`OpenStreetMap is busy (HTTP ${res.status}) — try again in a minute`);
-    } catch (e) {
-      lastErr = e;
+    } catch {
+      lastErr = new Error("OpenStreetMap is slow to respond right now — try again in a minute");
     }
     await new Promise((r) => setTimeout(r, Math.min(1000 * 2 ** attempt, 8000)));
   }
@@ -82,7 +83,7 @@ export async function discover(industry: string, place: string): Promise<RawLead
   return els.map(({ tags = {} }) => ({
     name: tags.name,
     website: tags.website ?? tags["contact:website"] ?? tags.url ?? null,
-    phone: tags.phone ?? tags["contact:phone"] ?? null,
+    phone: formatPhone(tags.phone ?? tags["contact:phone"]),
     email: tags.email ?? tags["contact:email"] ?? null,
     address: [tags["addr:housenumber"], tags["addr:street"]].filter(Boolean).join(" ") || null,
     city: tags["addr:city"] ?? label.split(",")[0],

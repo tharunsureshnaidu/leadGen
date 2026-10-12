@@ -1,4 +1,5 @@
 import * as cheerio from "cheerio";
+import { formatPhone } from "./phone.ts";
 import type { Owner, Signals } from "./types.ts";
 
 // Pure HTML -> signals. No network here so it stays unit-testable.
@@ -87,8 +88,7 @@ export function extractSignals(pages: { url: string; html: string }[], domain?: 
   const phoneByDigits = new Map<string, string>();
   for (const p of phones) {
     const d = p.replace(/\D/g, "").replace(/^1(?=\d{10}$)/, "");
-    const pretty = d.length === 10 ? `(${d.slice(0, 3)}) ${d.slice(3, 6)}-${d.slice(6)}` : p.trim();
-    if (d.length >= 10 && d.length <= 13 && !phoneByDigits.has(d)) phoneByDigits.set(d, pretty);
+    if (d.length >= 10 && d.length <= 13 && !phoneByDigits.has(d)) phoneByDigits.set(d, formatPhone(p)!);
   }
 
   const validYears = (ys: number[]) => ys.filter((y) => y >= 1850 && y <= nowYear());
