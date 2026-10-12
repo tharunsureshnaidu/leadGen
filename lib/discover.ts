@@ -1,4 +1,4 @@
-import { cached, db, HOUR, init } from "./db.ts";
+import { cached, db, init } from "./db.ts";
 import { INDUSTRIES } from "./industries.ts";
 import { formatPhone } from "./phone.ts";
 
@@ -43,6 +43,7 @@ async function geocode(place: string) {
   return cached(`geo:${place.toLowerCase()}`, async () => {
     const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(place)}`, {
       headers: { "User-Agent": UA },
+      signal: AbortSignal.timeout(10_000),
     });
     const [hit] = await res.json();
     if (!hit) throw new Error(`Couldn't find "${place}"`);
@@ -57,12 +58,12 @@ type OsmEl = { tags?: Record<string, string> };
 
 async function overpass(query: string): Promise<OsmEl[]> {
   // Public Overpass servers often answer 429/504 under load; a short backoff usually gets through.
-  const deadline = Date.now() + 50_000; // stay inside the 60s function limit
+  const deadline = Date.now() + 30_000; // fail within ~30s; a cached copy (if any) is served instead
   let lastErr: unknown;
   for (let attempt = 0; Date.now() < deadline; attempt++) {
     const url = OVERPASS[attempt % OVERPASS.length];
     try {
-      const res = await fetch(url, { method: "POST", body: new URLSearchParams({ data: query }), headers: { "User-Agent": UA }, signal: AbortSignal.timeout(Math.min(25_000, deadline - Date.now())) });
+      const res = await fetch(url, { method: "POST", body: new URLSearchParams({ data: query }), headers: { "User-Agent": UA }, signal: AbortSignal.timeout(Math.max(1000, Math.min(20_000, deadline - Date.now()))) });
       if (res.ok) return (await res.json()).elements;
       lastErr = new Error(`OpenStreetMap is busy (HTTP ${res.status}) — try again in a minute`);
     } catch {
@@ -79,7 +80,8 @@ export async function discover(industry: string, place: string): Promise<RawLead
   const { bbox, label } = await geocode(place);
   const box = bbox.join(",");
   const query = `[out:json][timeout:25];(${ind.osm.map((f) => `nwr${f}["name"](${box});`).join("")});out center tags 300;`;
-  const els = await cached(`osm:${industry}:${box}`, () => overpass(query), 24 * HOUR);
+  // Cached 7 days: business listings change slowly, and repeat searches become instant.
+  const els = await cached(`osm:${industry}:${box}`, () => overpass(query));
   return els.map(({ tags = {} }) => ({
     name: tags.name,
     website: tags.website ?? tags["contact:website"] ?? tags.url ?? null,

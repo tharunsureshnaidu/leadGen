@@ -33,14 +33,19 @@ export const HOUR = 3600 * 1000;
 export const WEEK = 7 * 24 * HOUR;
 
 // Read-through cache for crawls, geocodes and Overpass queries.
+// Stale-if-error: if the upstream (e.g. a public OpenStreetMap server) is down, an expired copy beats an error.
 export async function cached<T>(key: string, fn: () => Promise<T>, ttl: number | ((value: T) => number) = WEEK): Promise<T> {
   await init();
   const hit = await db.execute({ sql: "SELECT value, fetched_at FROM cache WHERE key = ?", args: [key] });
-  if (hit.rows[0]) {
-    const value: T = JSON.parse(String(hit.rows[0].value));
-    if (Date.now() - Number(hit.rows[0].fetched_at) < (typeof ttl === "function" ? ttl(value) : ttl)) return value;
+  const stale: T | undefined = hit.rows[0] ? JSON.parse(String(hit.rows[0].value)) : undefined;
+  if (stale !== undefined && Date.now() - Number(hit.rows[0].fetched_at) < (typeof ttl === "function" ? ttl(stale) : ttl)) return stale;
+  let value: T;
+  try {
+    value = await fn();
+  } catch (e) {
+    if (stale !== undefined) return stale;
+    throw e;
   }
-  const value = await fn();
   await db.execute({
     sql: "INSERT INTO cache (key, value, fetched_at) VALUES (?, ?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value, fetched_at = excluded.fetched_at",
     args: [key, JSON.stringify(value), Date.now()],

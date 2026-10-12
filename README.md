@@ -55,7 +55,7 @@ Tier A ≥ 65, B ≥ 40, C below that. Weights live in [`lib/score.ts`](lib/scor
 | Hosting | **Vercel** | Static page plus serverless functions; DB on Turso; LLM on AWS Bedrock |
 
 **Caching and performance**
-- Read-through `cache` table: site crawls for 7 days (failed crawls only 1 hour), MX lookups for 7 days, geocodes for 7 days, and Overpass results for 24 hours. Re-running a city returns instantly and never re-crawls.
+- Read-through `cache` table: site crawls for 7 days (failed crawls only 1 hour), MX lookups for 7 days, geocodes and Overpass results for 7 days. Re-running a city returns instantly and never re-crawls. **Stale-if-error:** if OpenStreetMap is down, the last cached copy is served instead of an error.
 - Enrichment is **one lead per request**. The browser runs a 4-worker pool, which keeps a live progress bar going, keeps every request well under serverless time limits, and stays polite to target sites.
 - Per-fetch timeouts (8 s pages, 4 s robots.txt, 3 s MX), a 1.5 MB page cap, sub-pages fetched in parallel, and two Overpass mirrors with failover.
 - Node's happy-eyeballs per-family timeout is raised to 2 s. The 250 ms default made many small-business hosts look "unreachable".
